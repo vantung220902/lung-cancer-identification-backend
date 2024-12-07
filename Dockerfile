@@ -15,8 +15,6 @@ ENV CLOUDFRONT_DOMAIN public-storage.pat.datahouse.vn
 COPY . /app/
 
 RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
-RUN apt-get install python3-opencv
-RUN apt-get install libgl1 
 # Install the required dependencies
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
