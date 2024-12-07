@@ -1,0 +1,42 @@
+version: 0.2
+
+env:
+  parameter-store:
+    # npm
+    SUBNET_PUBLIC_AZ_A: /global/SUBNET_PUBLIC_AZ_A
+    SUBNET_PUBLIC_AZ_B: /global/SUBNET_PUBLIC_AZ_B
+    SECURITY_GROUP_PUBLIC_ID: /global/SECURITY_GROUP_PUBLIC_ID
+    TASK_EXECUTION_ROLE: /global/TASK_EXECUTION_ROLE
+    AWS_REGION: /global/AWS_REGION
+    AWS_ECR_REPOSITORY_URL: /global/AWS_ECR_REPOSITORY_URL
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.9
+  pre_build:
+    commands:
+      - echo Installing pip dependencies...
+      - pip install -r requirements.txt
+      - envsubst < appspec_template.yml > appspec.yml
+      - envsubst < taskdef_template.json > taskdef.json
+  build:
+    commands:
+      # build
+      - aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin ${AWS_ECR_REPOSITORY_URL}
+      - docker build --pull -t ${AWS_ECR_REPOSITORY_URL}:latest .
+      - echo Pushing the Docker image to registry...
+      - COMMIT_ID=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -b -8)
+      - docker tag ${AWS_ECR_REPOSITORY_URL}:latest ${AWS_ECR_REPOSITORY_URL}:${COMMIT_ID}
+      - docker push ${AWS_ECR_REPOSITORY_URL} --all-tags
+
+      - printf '{"ImageURI":"%s"}' ${AWS_ECR_REPOSITORY_URL}:${COMMIT_ID} > imageDetail.json
+      - ls -la
+
+artifacts:
+  files:
+    - 'appspec.yml'
+    - 'taskdef.json'
+    - 'imageDetail.json'
+  discard-paths: yes
+  name: BuildArtifact

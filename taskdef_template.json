@@ -1,0 +1,55 @@
+{
+  "family": "lung-cancer-identification-api",
+  "networkMode": "awsvpc",
+  "taskRoleArn": "$TASK_EXECUTION_ROLE",
+  "executionRoleArn": "$TASK_EXECUTION_ROLE",
+  "containerDefinitions": [
+    {
+      "name": "lung-cancer-identification-api",
+      "image": "<IMAGE1_NAME>",
+      "portMappings": [
+        {
+          "hostPort": 5000,
+          "protocol": "tcp",
+          "containerPort": 5000
+        }
+      ],
+      "ulimits": [
+        {
+          "name": "nofile",
+          "softLimit": 1024000,
+          "hardLimit": 1024000
+        }
+      ],
+      "secrets": [],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-create-group": "true",
+          "awslogs-group": "lung-cancer-identification-api",
+          "awslogs-region": "us-west-2",
+          "awslogs-stream-prefix": "lung-cancer"
+        }
+      }
+    }
+  ],
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "2048",
+  "memory": "4096",
+  "runParams": {
+    "networkConfiguration": {
+      "awsvpcConfiguration": {
+        "subnets": [
+          "$SUBNET_PUBLIC_AZ_A",
+          "$SUBNET_PUBLIC_AZ_B"
+        ],
+        "securityGroups": [
+          "$SECURITY_GROUP_PUBLIC_ID"
+        ],
+        "assignPublicIp": "DISABLED"
+      }
+    }
+  }
+}

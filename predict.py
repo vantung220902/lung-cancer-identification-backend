@@ -51,4 +51,4 @@ def predictImage(pathImage):
 
 
 if __name__ == '__main__':
-    predictImage('/Dataset/val/opacity/person1398_bacteria_3548.jpeg')
+    predictImage('/Dataset/test.jpeg')
