@@ -27,7 +27,7 @@
         "options": {
           "awslogs-create-group": "true",
           "awslogs-group": "lung-cancer-identification-api",
-          "awslogs-region": "us-west-2",
+          "awslogs-region": "ap-southeast-1",
           "awslogs-stream-prefix": "lung-cancer"
         }
       }
