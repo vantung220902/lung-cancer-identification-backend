@@ -311,6 +311,7 @@ def migrate():
     try:
         conn = get_database_connection()
         cur = conn.cursor()
+        cur.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";')
         cur.execute('CREATE TABLE IF NOT EXISTS users(username character varying(255) NOT NULL,'
                     'password character varying(500) NOT NULL,'
                     'full_name character varying(255) NOT NULL,'
