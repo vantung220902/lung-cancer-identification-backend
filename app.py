@@ -318,16 +318,16 @@ def migrate():
                     'id uuid NOT NULL DEFAULT uuid_generate_v4(),'
                     'CONSTRAINT pk_users PRIMARY KEY (id));')
         cur.execute(
-            'CREATE UNIQUE INDEX IF NOT EXISTS ixuq_users_username ON users;')
+            'CREATE UNIQUE INDEX IF NOT EXISTS ixuq_users_username ON "users"("username");')
 
-        cur.execute('CREATE TABLE IF NOT EXISTS public.prediction(id serial NOT NULL DEFAULT,'
+        cur.execute('CREATE TABLE IF NOT EXISTS "prediction"(id serial NOT NULL DEFAULT,'
                     'image_url character varying(1000) NOT NULL,'
                     'prediction character varying(50)  NOT NULL,'
                     'confidence json NOT NULL,'
                     'created_at timestamp without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,'
                     'user_id uuid NOT NULL,'
                     'CONSTRAINT pk_prediction PRIMARY KEY (id),'
-                    'CONSTRAINT fk_prediction_users FOREIGN KEY (user_id) REFERENCES public.users (id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION);')
+                    'CONSTRAINT fk_prediction_users FOREIGN KEY (user_id) REFERENCES "users" (id) MATCH SIMPLE ON UPDATE NO ACTION ON DELETE NO ACTION);')
         conn.commit()
         cur.close()
         conn.close()
