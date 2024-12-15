@@ -9,9 +9,6 @@ env:
     TASK_EXECUTION_ROLE: /global/TASK_EXECUTION_ROLE
     AWS_REGION: /global/AWS_REGION
     AWS_ECR_REPOSITORY_URL: /global/AWS_ECR_REPOSITORY_URL
-    SECRET_KEY: /global/SECRET_KEY
-    JWT_SECRET_KEY: /global/JWT_SECRET_KEY
-    DATABASE_URL: /global/DATABASE_URL
 
 phases:
   install:
@@ -23,13 +20,6 @@ phases:
       - pip install -r requirements.txt
       - envsubst < appspec_template.yml > appspec.yml
       - envsubst < taskdef_template.json > taskdef.json
-      - export DATABASE_URL=$DATABASE_URL
-      - echo $DATABASE_URL
-      - export SECRET_KEY=$SECRET_KEY
-      - export JWT_SECRET_KEY=$JWT_SECRET_KEY
-      - echo "JWT_SECRET_KEY=$JWT_SECRET_KEY" > .env
-      - echo "DATABASE_URL=$DATABASE_URL" > .env
-      - echo "SECRET_KEY=$SECRET_KEY" > .env
 
   build:
     commands:
@@ -49,6 +39,5 @@ artifacts:
     - 'appspec.yml'
     - 'taskdef.json'
     - 'imageDetail.json'
-    - '.env'  # Include the .env file in the artifacts
   discard-paths: yes
   name: BuildArtifact

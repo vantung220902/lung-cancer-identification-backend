@@ -21,7 +21,20 @@
           "hardLimit": 1024000
         }
       ],
-      "secrets": [],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:ssm:ap-southeast-1:735708994317:parameter/global/DATABASE_URL"
+        },
+        {
+          "name": "SECRET_KEY",
+          "valueFrom": "arn:aws:ssm:ap-southeast-1:735708994317:parameter/global/SECRET_KEY"
+        },
+        {
+          "name": "JWT_SECRET_KEY",
+          "valueFrom": "arn:aws:ssm:ap-southeast-1:735708994317:parameter/global/JWT_SECRET_KEY"
+        }
+      ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
