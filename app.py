@@ -1,24 +1,59 @@
+import datetime
+from flask_bcrypt import Bcrypt
 from flask import Flask, request, jsonify
 from PIL import Image
 import requests
 from io import BytesIO
 import predict
+import users
+import prediction_db
+import psycopg2
 import os
 import boto3
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 import random
 from dotenv import load_dotenv
 import numpy
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt, create_refresh_token
 
 # Load environment variables from a .env file
 load_dotenv()
 
 
 app = Flask(__name__)
+bcrypt = Bcrypt(app)
 
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 S3_BUCKET_REGION = os.getenv("S3_BUCKET_REGION", "us-west-2")
 CLOUDFRONT_DOMAIN = os.getenv("CLOUDFRONT_DOMAIN")
+SECRET_KEY = os.getenv("SECRET_KEY")
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+
+app.config['SECRET_KEY'] = SECRET_KEY
+app.config['JWT_SECRET_KEY'] = JWT_SECRET_KEY
+app.config['JWT_TOKEN_LOCATION'] = ['headers']
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(seconds=3600)
+app.config['JWT_REFRESH_TOKEN_EXPIRES'] = datetime.timedelta(seconds=3600)
+
+jwt = JWTManager(app)
+
+print("DATABASE_URL", os.getenv("DATABASE_URL"))
+
+def get_database_connection():
+    try:
+        db_url = os.getenv("DATABASE_URL")
+        if not db_url:
+            raise ValueError("DATABASE_URL is not set or empty.")
+
+        conn = psycopg2.connect(db_url)
+        print("Database connected successfully")
+        return conn
+    except psycopg2.OperationalError as e:
+        print("OperationalError: Could not connect to the database.")
+        print(e)
+    except Exception as e:
+        print("An unexpected error occurred.")
+        print(e)
 
 
 s3_client = boto3.client(
@@ -30,6 +65,7 @@ s3_client = boto3.client(
 
 
 @app.route('/get-presigned-url', methods=['GET'])
+@jwt_required()
 def get_presigned_url():
     try:
         # Retrieve query parameters
@@ -64,6 +100,7 @@ def get_presigned_url():
 
 
 @app.route('/predict', methods=['POST'])
+@jwt_required()
 def predict_pneumonia():
     data = request.json
     if not data or 'image_url' not in data:
@@ -72,26 +109,27 @@ def predict_pneumonia():
     image_url = data['image_url']
 
     try:
-        # Download the image from the URL
+        conn = get_database_connection()
         response = requests.get(image_url)
-        response.raise_for_status()  # Raise an error if the download fails
+        response.raise_for_status()
+        user_id = get_jwt_identity()
 
-        # Open the image
         image = Image.open(BytesIO(response.content))
 
-        # Save temporarily to process (optional, can work directly with PIL image)
         temp_path = os.path.join("temp", "temp_image.jpg")
         os.makedirs("temp", exist_ok=True)
         image.save(temp_path)
 
-        # Call your prediction function
         prediction, avg = predict.predictImage(
-            temp_path)  # Example function call
+            temp_path)
 
-        # Clean up the temporary file
         os.remove(temp_path)
-
-        return jsonify({"prediction": prediction, "confidence": numpy.array(avg).tolist()})
+        prediction_db.create_prediction(
+            image_url=image_url,
+            user_id=user_id,
+            confidence=numpy.array(avg[0]).tolist(),
+            prediction=prediction, conn=conn)
+        return jsonify({"prediction": prediction, "confidence": numpy.array(avg[0]).tolist()})
 
     except requests.exceptions.RequestException as e:
         return jsonify({"error": f"Failed to download image: {str(e)}"}), 500
@@ -100,6 +138,7 @@ def predict_pneumonia():
 
 
 @app.route('/examples', methods=['GET'])
+@jwt_required()
 def load_samples_images():
     normal_images = []
     pneumonia_images = []
@@ -107,9 +146,6 @@ def load_samples_images():
     try:
 
         paginator = s3_client.get_paginator('list_objects_v2')
-
-        print("S3_BUCKET_NAME", S3_BUCKET_NAME)
-
         normal_parameter = {'Bucket': S3_BUCKET_NAME,
                             'Prefix': 'Dataset/train/normal'}
 
@@ -151,6 +187,120 @@ def greeting():
         return jsonify({
             "status": "OK",
             "message": "Hello World!",
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/refresh', methods=['POST'])
+@jwt_required(refresh=True)
+def refresh():
+    try:
+        current_user = get_jwt_identity()
+        access_token = create_access_token(identity=current_user)
+        refresh_token = create_refresh_token(
+            identity=current_user)
+
+        return jsonify({
+            "status": "OK",
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/my/prediction', methods=['GET'])
+@jwt_required()
+def get_my_prediction():
+    try:
+        conn = get_database_connection()
+        user_id = get_jwt_identity()
+        predictions = prediction_db.find_prediction_by_user_id(
+            user_id=user_id, conn=conn)
+        conn.close()
+        if predictions:
+            return jsonify({
+                "status": "OK",
+                "prediction": predictions
+            })
+
+        return jsonify({'message': 'Get Me failed'}), 401
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/me', methods=['GET'])
+@jwt_required()
+def get_me():
+    try:
+        conn = get_database_connection()
+        user_id = get_jwt_identity()
+        found_user = users.find_user_by_id(
+            id=user_id, conn=conn)
+        conn.close()
+        if found_user:
+            return jsonify({
+                "status": "OK",
+                "username": found_user['username'],
+                "full_name": found_user['full_name'],
+                "id": found_user["id"]
+            })
+
+        return jsonify({'message': 'Get Me failed'}), 401
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.json
+    if not data or 'username' not in data or 'password' not in data:
+        return jsonify({"error": "No username and password provided"}), 400
+    try:
+        conn = get_database_connection()
+        found_user = users.find_user(username=data['username'],
+                                     password=data['password'],
+                                     conn=conn,
+                                     bcrypt=bcrypt)
+        conn.close()
+        if found_user:
+            access_token = create_access_token(identity=str(found_user["id"]))
+            refresh_token = create_refresh_token(
+                identity=str(found_user["id"]))
+            return jsonify({
+                "status": "OK",
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "username": found_user['username'],
+                "full_name": found_user['full_name'],
+                "id": found_user["id"]
+            })
+
+        return jsonify({'message': 'Login Failed'}), 401
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.json
+    if not data or 'username' not in data or 'password' not in data or 'full_name' not in data:
+        return jsonify({"error": "No username and password and full_name provided"}), 400
+
+    try:
+        conn = get_database_connection()
+        users.create_user(
+            username=data['username'],
+            password=data['password'],
+            full_name=data['full_name'],
+            conn=conn,
+            bcrypt=bcrypt)
+
+        conn.close()
+        return jsonify({
+            "status": "OK",
+            "message": "Register user successfully",
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500

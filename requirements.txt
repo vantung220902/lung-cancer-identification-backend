@@ -7,3 +7,6 @@ python-dotenv==1.0.1
 boto3==1.35.34
 keras==3.3.3
 tensorflow==2.16.1
+psycopg2-binary==2.9.10
+flask_bcrypt==1.0.1
+flask_jwt_extended==4.7.1
